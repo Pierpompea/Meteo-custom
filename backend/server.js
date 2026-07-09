@@ -6,7 +6,7 @@ const crypto = require("crypto");
 const PORT = process.env.PORT || 10000;
 const TOKEN_SECRET = process.env.TOKEN_SECRET || "dev-secret-change-me";
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "*";
-const DATA_DIR = process.env.DATA_DIR || __dirname;
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, "frontend");
 const USERS_FILE = path.join(DATA_DIR, "utenti.json");
 const TOKEN_TTL_SECONDS = 60 * 60 * 24 * 14;
 
