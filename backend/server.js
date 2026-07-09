@@ -35,6 +35,7 @@ function readUsers() {
 
 function writeUsers(data) {
   fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2));
+  console.log("UTENTI_DB:", JSON.stringify(data));
 }
 
 function normalizeUsername(username) {
