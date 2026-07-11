@@ -1,4 +1,4 @@
-const CACHE_NAME = "meteo-su-misura-v10";
+const CACHE_NAME = "meteo-su-misura-v12";
 const APP_SHELL = [
   "./",
   "./index.html",
