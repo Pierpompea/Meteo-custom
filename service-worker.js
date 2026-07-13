@@ -10,10 +10,6 @@ const APP_SHELL = [
   "./apple-touch-icon.png",
   "./android-chrome-192x192.png",
   "./android-chrome-512x512.png",
-  "./icons/icon-180.png",
-  "./icons/icon-192.png",
-  "./icons/icon-512.png",
-  "./icons/logo.svg",
 ];
 
 self.addEventListener("install", (event) => {
