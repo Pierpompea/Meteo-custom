@@ -2,7 +2,7 @@
   "name": "meteo-backend-render",
   "version": "1.0.0",
   "private": true,
-  "description": "Backend semplice per Me!teo con utenti.json e token firmati.",
+  "description": "Backend semplice per Me!teo con utenti.json con password hashate e sessioni per ogni utente.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
