@@ -13,21 +13,17 @@ const WEATHER_CODES = {
 const WEATHER_THEME_CLASSES = ["weather-sunny", "weather-rainy", "weather-cloudy"];
 const API_BASE_URL = (window.METEO_API_BASE_URL || "").replace(/\/$/, "");
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
+// operazioni matematiche (superflue)
 const rounded = (v) => Math.round(v * 10) / 10;
 const clamp   = (v, min, max) => Math.max(min, Math.min(max, v));
 // da capire meglio calcoli e lettura/scrittura su localstorage 
-// Legge o scrive da localStorage in formato JSON
-// storage("chiave")         → legge
-// storage("chiave", valore) → scrive
-function storage(key, value) {
+function storage(key, value) { //key mi serve perchè ad ogni valore ci accedo con una chiave
   if (value === undefined) {
     try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
   }
   localStorage.setItem(key, JSON.stringify(value));
 }
 
-// ── STATO ─────────────────────────────────────────────────────────────────────
 const state = {
   weather:        null,
   coords:         storage("meteo:coords")  || DEFAULT_COORDS,
@@ -35,8 +31,7 @@ const state = {
   recommendation: null,
 };
 
-//da capire cosa fa fromentries e cosa cambia rispetto a document.queryselector
-// ── ELEMENTI DOM ──────────────────────────────────────────────────────────────
+//versione sintetizzata al posto di usare  actualTemp: document.querySelector("#actualTemp") ecc
 const els = Object.fromEntries(
   ["actualTemp","personalTemp","weatherSummary","personalSummary","windValue","humidityValue",
    "apparentValue","outfitSummary","outfitList","locationName","geoBtn","refreshBtn","feedbackForm",
@@ -45,16 +40,14 @@ const els = Object.fromEntries(
   .map((id) => [id, document.getElementById(id)])
 );
 
-// ── SESSIONE ──────────────────────────────────────────────────────────────────
 const getSession   = ()             => localStorage.getItem("meteo:session");
 const setSession   = (id, username) => { localStorage.setItem("meteo:session", id); localStorage.setItem("meteo:user", username); };
 const clearSession = ()             => { localStorage.removeItem("meteo:session"); localStorage.removeItem("meteo:user"); };
 
-// ── AUTH UI ───────────────────────────────────────────────────────────────────
 function renderAuthState(message) {
   const isLogged = Boolean(getSession());
   els.authStatus.textContent =
-    !API_BASE_URL ? "Backend non configurato: salvo solo su questo dispositivo." :
+    !API_BASE_URL ? "Errore nel backend. salvataggio solo su dispositivo." :
     message       ? message :
     isLogged      ? `Connesso come ${localStorage.getItem("meteo:user")}.` :
                     "Accedi per sincronizzare il profilo su più dispositivi.";
@@ -63,19 +56,18 @@ function renderAuthState(message) {
   els.logoutBtn.hidden     = !isLogged;
 }
 
-// ── CHIAMATE AL BACKEND ───────────────────────────────────────────────────────
 async function apiRequest(path, { method = "GET", body, auth = false } = {}) {
   if (!API_BASE_URL) throw new Error("Backend non configurato");
   const headers = { "Content-Type": "application/json" };
   if (auth) headers.Authorization = `Bearer ${getSession()}`;
-  const response = await fetch(`${API_BASE_URL}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  const response = await fetch(`${API_BASE_URL}${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined }); //lo devo per forza trasformare in json
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "Richiesta non riuscita");
   return data;
 }
 
 async function handleAuth(mode) {
-  const username = els.authUsername.value.trim();
+  const username = els.authUsername.value.trim(); //tolgo spazi vuoti sennò da problemi
   const password = els.authPassword.value;
   if (!username || !password) return renderAuthState("Inserisci username e password.");
   try {
@@ -84,17 +76,19 @@ async function handleAuth(mode) {
       body: { username, password, initialData: { profile: state.profile, lastCoords: state.coords } },
     });
     setSession(data.sessionId, data.username);
-    if (data.profile) { state.profile = data.profile; storage("meteo:profile", state.profile); }
+    if (data.profile) { 
+      state.profile = data.profile; 
+      storage("meteo:profile", state.profile); 
+    }
     els.authPassword.value = "";
     renderAuthState(mode === "register" ? "Account creato." : "Accesso effettuato.");
     renderProfile();
     aggiornaConsiglio();
-  } catch (e) { renderAuthState(e.message); }
+  } catch (e) {renderAuthState(e.message);}
 }
 
-// ── METEO ─────────────────────────────────────────────────────────────────────
 async function fetchWeather(coords = state.coords) {
-  els.weatherSummary.textContent = "Sto sbirciando fuori per te...";
+  els.weatherSummary.textContent = "Aggiornando le informazioni meteo...";
   try {
     const params = new URLSearchParams({
       latitude: coords.latitude, longitude: coords.longitude,
@@ -114,55 +108,51 @@ async function fetchWeather(coords = state.coords) {
     };
     aggiornaConsiglio();
   } catch (e) {
-    els.weatherSummary.textContent = `${e.message}. Per non lasciarti al buio, parto da Roma.`;
+    els.weatherSummary.textContent = `${e.message}. Impossibile reperire informazioni locali, parto da Roma.`;
     if (coords !== DEFAULT_COORDS) fetchWeather(DEFAULT_COORDS).catch(() => {
       els.weatherSummary.textContent = "Il meteo non mi risponde. Riprova tra poco.";
     });
   }
 }
 
-// ── POSIZIONE ─────────────────────────────────────────────────────────────────
 function requestGeolocation() {
   if (!navigator.geolocation) {
     els.locationName.textContent = "GPS non disponibile. Uso l'ultima posizione salvata.";
     return fetchWeather(state.coords);
   }
-  els.locationName.textContent = "Cerco dove sei...";
-  navigator.geolocation.getCurrentPosition(
-    async (position) => {
+  els.locationName.textContent = "Ricerca posizione...";
+  navigator.geolocation.getCurrentPosition( //devo mettere i 3 parametri di ingresso che definisco direttamente per compattare tutto
+    async (position) => { //successCallback
       state.coords = { latitude: position.coords.latitude, longitude: position.coords.longitude, name: "La tua posizione" };
       storage("meteo:coords", state.coords);
-      // Prova a ottenere il nome del luogo da Nominatim (best-effort)
       try {
-        const params = new URLSearchParams({ format: "jsonv2", lat: state.coords.latitude, lon: state.coords.longitude, zoom: "14", addressdetails: "1", "accept-language": "it" });
+        const params = new URLSearchParams({ format: "jsonv2", lat: state.coords.latitude, lon: state.coords.longitude, zoom: "20", addressdetails: "1", "accept-language": "it" }); //modifico la precisione della posizione
         const res  = await fetch(`https://nominatim.openstreetmap.org/reverse?${params}`);
         const data = await res.json();
         const a    = data.address || {};
         state.coords.name = [a.city || a.town || a.village, a.suburb || a.neighbourhood].filter(Boolean).join(" · ") || state.coords.name;
         storage("meteo:coords", state.coords);
         els.locationName.textContent = state.coords.name;
-      } catch { /* le coordinate bastano lo stesso */ }
+      } catch { } //lo lascio vuoto sennò se ho errore non aggiorna il meteo
       fetchWeather(state.coords);
     },
-    (e) => {
+    (e) => { //errorCallback
       els.locationName.textContent = `${e.code === e.PERMISSION_DENIED ? "Permesso GPS negato" : "Posizione non disponibile"}. Uso l'ultima salvata.`;
       fetchWeather(state.coords);
     },
-    { enableHighAccuracy: true, timeout: 12000, maximumAge: 300000 }
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 300000 } //options
   );
 }
 
-// ── LOGICA PROFILO TERMICO ────────────────────────────────────────────────────
 const TEMP_BUCKETS = [
   { id: "freezing", max: 5 }, { id: "cold", max: 12 }, { id: "cool", max: 18 },
   { id: "mild", max: 24 },    { id: "warm", max: 30 }, { id: "hot", max: Infinity },
 ];
-const getTemperatureBucket = (temp) => TEMP_BUCKETS.find((b) => temp <= b.max)?.id || "mild";
+const getTemperatureBucket = (temp) => TEMP_BUCKETS.find((b) => {temp <= b.max})?.id || "mild"; //definisco la funzione direttamente in find
 const getBucketBias        = (temp) => Number(state.profile.bucketBiases?.[getTemperatureBucket(temp)]) || 0;
 const clothingWarmth       = (items) => items.reduce((sum, c) => sum + c.weight, 0);
 const calculatePersonalTemp = () => rounded(state.weather.apparentTemperature + state.profile.bias + getBucketBias(state.weather.apparentTemperature) + clothingWarmth(getSelectedClothing()) * 0.35);
 const calculateProfileTemp  = () => rounded(state.weather.apparentTemperature + state.profile.bias + getBucketBias(state.weather.apparentTemperature));
-//da rivedere la formattazione e la sintassi
 function getWeatherTheme(weatherCode) {
   if ([51,53,55,61,63,65,80,81,82,95].includes(weatherCode)) return "weather-rainy";
   if ([2,3,45,48].includes(weatherCode))                      return "weather-cloudy";
@@ -176,18 +166,18 @@ function buildOutfit() {
   const isHumid = state.weather.humidity >= 75;
 
   let title, items;
-  if      (profileTemp <= 4)  { title = "Copriti bene: oggi fuori fa il serio.";              items = ["cappotto caldo","maglione o pile","sciarpa","scarpe chiuse"]; }
-  else if (profileTemp <= 10) { title = "Strati furbi: fuori caldo addosso, dentro libertà."; items = ["giacca pesante","maglione","pantaloni lunghi","calze calde"]; }
-  else if (profileTemp <= 16) { title = "Serve una via di mezzo: niente eroismi.";             items = ["giacca leggera","felpa o cardigan","pantaloni lunghi","strato facile da togliere"]; }
-  else if (profileTemp <= 22) { title = "Si sta bene, ma portati un piano B leggero.";        items = ["t-shirt o camicia","giacca leggera a portata","pantaloni comodi"]; }
-  else if (profileTemp <= 28) { title = "Oggi andrei sul fresco e comodo.";                   items = ["t-shirt","tessuti leggeri","pantaloni leggeri o gonna","occhiali da sole se esci a lungo"]; }
-  else                        { title = "Fa caldo davvero: lascia respirare tutto.";           items = ["tessuti traspiranti","pantaloncini o abiti leggeri","cappello se stai al sole","acqua con te"]; }
+  if      (profileTemp <= 4)  { title = "Copriti bene, fa molto freddo."; items = ["cappotto","maglione o pile","sciarpa","calze calde"]; }
+  else if (profileTemp <= 10) { title = "Copriti bene, fa comunque freddo."; items = ["giacca pesante","maglione","pantaloni lunghi"]; }
+  else if (profileTemp <= 16) { title = "Serve una via di mezzo."; items = ["giacca leggera","felpa o cardigan","pantaloni lunghi","strato facile da togliere"]; }
+  else if (profileTemp <= 22) { title = "Si sta bene, ma portati un piano B leggero."; items = ["t-shirt o camicia","giacca leggera a portata","pantaloni comodi"]; }
+  else if (profileTemp <= 28) { title = "Fa abbastanza caldo, vestiti leggero."; items = ["t-shirt","tessuti leggeri","pantaloni leggeri o gonna","occhiali da sole se esci a lungo"]; }
+  else { title = "Fa molto caldo, vestiti molto leggero."; items = ["tessuti traspiranti","pantaloncini o abiti leggeri","cappello se stai al sole","acqua con te"]; }
 
-  if (hasRain)                         items.push("ombrello o impermeabile");
-  if (isWindy)                         items.push("strato antivento");
-  if (isHumid && profileTemp >= 20)    items.push("qualcosa che asciughi in fretta");
-  if (state.profile.bias > 0.6  && profileTemp <= 18) items.push("uno strato extra, per sicurezza");
-  if (state.profile.bias < -0.6 && profileTemp >= 14) items.push("strati facili da togliere");
+  if (hasRain) items.push("ombrello o impermeabile");
+  if (isWindy) items.push("strato antivento");
+  if (isHumid && profileTemp >= 20) items.push("qualcosa che asciughi in fretta");
+  if (state.profile.bias > -0.6  && profileTemp <= 18) items.push("uno strato extra, per sicurezza");
+  if (state.profile.bias < 0.6 && profileTemp >= 14) items.push("strati facili da togliere");
 
   return { title, items: [...new Set(items)] };
 }
@@ -205,24 +195,23 @@ function applyFeedbackLearning(comfort, clothes) {
   const bucket = getTemperatureBucket(state.weather.apparentTemperature);
 
   if (meta.score === 0) {
-    state.profile.bias = rounded(state.profile.bias * 0.9); //forse inutile da calcolare
-    state.profile.bucketBiases[bucket] = rounded((Number(state.profile.bucketBiases[bucket]) || 0) * 0.82);
+    state.profile.bias = rounded(state.profile.bias * 0.9); //riduco il bias moltiplicando per 0.9 e 0.7 così nel tempo stabilizzo i valori
+    state.profile.bucketBiases[bucket] = rounded((Number(state.profile.bucketBiases[bucket]) || 0) * 0.7);
     return meta;
   }
 
   const warmth    = clothingWarmth(clothes);
-  const envMult   = (meta.score > 0 && state.weather.apparentTemperature <= 6) || (meta.score < 0 && state.weather.apparentTemperature >= 29) ? 0.7 //se cambio poco ne tengo conto poco
+  const envMult   = (meta.score > 0 && state.weather.apparentTemperature <= 6) || (meta.score < 0 && state.weather.apparentTemperature >= 36) ? 0.7 //se cambio poco ne tengo conto poco
                   : (meta.score > 0 && state.weather.apparentTemperature >= 18) || (meta.score < 0 && state.weather.apparentTemperature <= 16) ? 1.15 : 1; //se cambio tanto ne tengo conto tanto ma se non è nessuna delle due faccio via di mezzo
   const clothMult = (meta.score < 0 && warmth >= 3) || (meta.score > 0 && warmth <= -1) ? 1.25
                   : (meta.score < 0 && warmth <= -1) || (meta.score > 0 && warmth >= 3) ? 0.72 : 1;
   const step      = rounded(meta.score * envMult * clothMult);
 
-  state.profile.bias = rounded(clamp(state.profile.bias + step * 0.5, -4, 4)); //moltiplico per 0.5 altrimenti è troppo sensibile
-  state.profile.bucketBiases[bucket] = rounded(clamp((Number(state.profile.bucketBiases[bucket]) || 0) + step * 0.5, -3, 3));
+  state.profile.bias = rounded(clamp(state.profile.bias + step * 0.5, -10, 10)); //moltiplico per 0.5 altrimenti è troppo sensibile
+  state.profile.bucketBiases[bucket] = rounded(clamp((Number(state.profile.bucketBiases[bucket]) || 0) + step * 0.5, -5, 5));
   return meta;
 }
 
-// ── CONSIGLIO OUTFIT ──────────────────────────────────────────────────────────
 function getSelectedClothing() {
   return [...document.querySelectorAll("input[name='clothing']:checked")]
     .map((input) => ({ label: input.parentElement.textContent.trim(), weight: Number(input.dataset.weight) }));
@@ -339,7 +328,3 @@ els.resetBtn.addEventListener("click", () => {
 renderProfile();
 renderAuthState();
 fetchWeather(state.coords);
-
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("./service-worker.js").catch(() => {}));
-}
