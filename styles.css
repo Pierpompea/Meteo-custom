@@ -355,7 +355,7 @@ h3 {
 
 .temperature-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(190px, 0.85fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.8fr);
   gap: 16px;
 }
 
@@ -363,6 +363,7 @@ h3 {
 .temperature-personal,
 .outfit-card,
 .feedback-card {
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 28px;
   padding: 20px;
@@ -426,9 +427,10 @@ h3 {
   align-items: start;
   gap: 4px;
   margin: 12px 0 4px;
-  font-size: clamp(4.4rem, 12vw, 8rem);
+  font-size: clamp(2.8rem, 8vw, 5.5rem);
   font-weight: 950;
   line-height: 0.82;
+  max-width: 100%;
 }
 
 .temp-value.personal {
@@ -436,7 +438,7 @@ h3 {
 }
 
 .temp-value small {
-  font-size: 1.6rem;
+  font-size: 0.34em;
   line-height: 1;
   margin-top: 6px;
 }
