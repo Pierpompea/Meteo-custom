@@ -151,8 +151,9 @@ const TEMP_BUCKETS = [
 const getTemperatureBucket = (temp) => TEMP_BUCKETS.find((b) => {temp <= b.max})?.id || "mild"; //definisco la funzione direttamente in find
 const getBucketBias        = (temp) => Number(state.profile.bucketBiases?.[getTemperatureBucket(temp)]) || 0;
 const clothingWarmth       = (items) => items.reduce((sum, c) => sum + c.weight, 0);
-const calculatePersonalTemp = () => rounded(state.weather.apparentTemperature + state.profile.bias + 0.5*getBucketBias(state.weather.apparentTemperature));
-const calculateProfileTemp  = () => rounded(state.weather.apparentTemperature + state.profile.bias + 0.5*getBucketBias(state.weather.apparentTemperature));
+const getCappedBias = () => clamp(state.profile.bias + 0.5*getBucketBias(state.weather.apparentTemperature), -10, 10);
+const calculatePersonalTemp = () => rounded(state.weather.apparentTemperature + getCappedBias());
+const calculateProfileTemp  = () => rounded(state.weather.apparentTemperature + getCappedBias());
 function getWeatherTheme(weatherCode) {
   if ([51,53,55,61,63,65,80,81,82,95].includes(weatherCode)) return "weather-rainy";
   if ([2,3,45,48].includes(weatherCode))                      return "weather-cloudy";
