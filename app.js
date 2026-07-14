@@ -151,8 +151,8 @@ const TEMP_BUCKETS = [
 const getTemperatureBucket = (temp) => TEMP_BUCKETS.find((b) => {temp <= b.max})?.id || "mild"; //definisco la funzione direttamente in find
 const getBucketBias        = (temp) => Number(state.profile.bucketBiases?.[getTemperatureBucket(temp)]) || 0;
 const clothingWarmth       = (items) => items.reduce((sum, c) => sum + c.weight, 0);
-const calculatePersonalTemp = () => rounded(state.weather.apparentTemperature + state.profile.bias + getBucketBias(state.weather.apparentTemperature) + clothingWarmth(getSelectedClothing()) * 0.35);
-const calculateProfileTemp  = () => rounded(state.weather.apparentTemperature + state.profile.bias + getBucketBias(state.weather.apparentTemperature));
+const calculatePersonalTemp = () => rounded(state.weather.apparentTemperature + state.profile.bias + 0.5*getBucketBias(state.weather.apparentTemperature));
+const calculateProfileTemp  = () => rounded(state.weather.apparentTemperature + state.profile.bias + 0.5*getBucketBias(state.weather.apparentTemperature));
 function getWeatherTheme(weatherCode) {
   if ([51,53,55,61,63,65,80,81,82,95].includes(weatherCode)) return "weather-rainy";
   if ([2,3,45,48].includes(weatherCode))                      return "weather-cloudy";
@@ -190,14 +190,13 @@ const COMFORT_META = {
   veryHot:  { label: "molto caldo",  score:  1.2, toast: "Ricevuto: oggi eri troppo coperto." },
 };
 
-function applyFeedbackLearning(comfort, clothes) {
-  const meta   = COMFORT_META[comfort] || COMFORT_META.ok;
+function applyFeedbackLearning(meta, clothes) {
   const bucket = getTemperatureBucket(state.weather.apparentTemperature);
 
   if (meta.score === 0) {
     state.profile.bias = rounded(state.profile.bias * 0.9); //riduco il bias moltiplicando per 0.9 e 0.7 così nel tempo stabilizzo i valori
     state.profile.bucketBiases[bucket] = rounded((Number(state.profile.bucketBiases[bucket]) || 0) * 0.7);
-    return meta;
+    return;
   }
 
   const warmth    = clothingWarmth(clothes);
@@ -209,11 +208,10 @@ function applyFeedbackLearning(comfort, clothes) {
 
   state.profile.bias = rounded(clamp(state.profile.bias + step * 0.5, -10, 10)); //moltiplico per 0.5 altrimenti è troppo sensibile
   state.profile.bucketBiases[bucket] = rounded(clamp((Number(state.profile.bucketBiases[bucket]) || 0) + step * 0.5, -5, 5));
-  return meta;
 }
 
 function getSelectedClothing() {
-  return [...document.querySelectorAll("input[name='clothing']:checked")]
+  return [...document.querySelectorAll("input[name='clothing']:checked")] //devo mettere i 3 puntini dato che la funzione restituisce una nodelist che devo trasformare in array
     .map((input) => ({ label: input.parentElement.textContent.trim(), weight: Number(input.dataset.weight) }));
 }
 
@@ -227,14 +225,15 @@ function aggiornaConsiglio() {
   renderWeather();
 }
 
-// ── FEEDBACK ──────────────────────────────────────────────────────────────────
 function handleFeedback(event) {
   event.preventDefault();
   if (!state.weather) return;
 
   const comfort = new FormData(els.feedbackForm).get("comfort");
   const clothes = getSelectedClothing();
-  const meta    = applyFeedbackLearning(comfort, clothes);
+  const meta   = COMFORT_META[comfort] || COMFORT_META.ok;
+
+  applyFeedbackLearning(meta, clothes);
 
   state.profile.feedbackCount += 1;
   state.profile.history.unshift({
@@ -247,9 +246,8 @@ function handleFeedback(event) {
   state.profile.history = state.profile.history.slice(0, 12);
   storage("meteo:profile", state.profile);
 
-  // Se loggato, salva anche sul backend (best-effort: non blocca se fallisce)
-  if (API_BASE_URL && getSession()) {
-    apiRequest("/api/profile", { method: "PUT", auth: true, body: { profile: state.profile, lastCoords: state.coords } }).catch(() => {});
+  if (API_BASE_URL && getSession()) { //se sono loggato salva anche sul backend
+    apiRequest("/api/profile", { method: "PUT", auth: true, body: { profile: state.profile, lastCoords: state.coords } }).catch(() => {}); //da aggiungere gestione errore
   }
 
   els.feedbackToast.textContent = meta.toast;
@@ -258,7 +256,6 @@ function handleFeedback(event) {
   renderProfile();
 }
 
-// ── RENDER ────────────────────────────────────────────────────────────────────
 function renderWeather() {
   if (!state.weather || !state.recommendation) return;
   const diff = rounded(state.recommendation.personalTemp - state.weather.temperature);
@@ -272,13 +269,13 @@ function renderWeather() {
   els.personalSummary.textContent =
     diff > 1  ? `Secondo il tuo corpo, oggi sembra circa ${diff} °C più caldo.` :
     diff < -1 ? `Secondo il tuo corpo, oggi sembra circa ${Math.abs(diff)} °C più freddo.` :
-                "Oggi numero e sensazione si parlano abbastanza bene.";
+                "Il tuo corpo percepisce la temperatura effettiva.";
   document.body.classList.remove(...WEATHER_THEME_CLASSES);
   document.body.classList.add(state.recommendation.theme || "weather-sunny");
   els.outfitSummary.textContent = state.recommendation.outfit.title;
   els.outfitList.innerHTML = "";
   state.recommendation.outfit.items.forEach((item) => {
-    const li = document.createElement("li");
+    const li = document.createElement("li"); //uso li per aggiornare la lista di outfit
     li.textContent = item;
     els.outfitList.append(li);
   });
@@ -288,14 +285,14 @@ function renderProfile() {
   const bias = rounded(state.profile.bias);
   els.biasMeter.style.left = `${clamp(50 + bias * 8, 5, 95)}%`;
   if (state.profile.feedbackCount === 0) {
-    els.profileText.textContent  = "Ti conosco ancora poco: raccontami due uscite e divento più sveglio.";
+    els.profileText.textContent  = "Ti conosco ancora poco: raccontami le tue uscite.";
     els.learningNote.textContent = "Non ti conosco ancora: parto neutro.";
   } else {
     const tendency = bias > 0.4 ? "senti più caldo degli altri" : bias < -0.4 ? "senti più freddo degli altri" : "sei allineato al meteo";
     els.profileText.textContent  = `Dopo ${state.profile.feedbackCount} feedback, ${tendency}. Correggo di ${bias > 0 ? "+" : ""}${bias} °C.`;
     els.learningNote.textContent = `La prossima volta ragiono con ${bias > 0 ? "+" : ""}${bias} °C in più.`;
   }
-  els.historyList.innerHTML = "";
+  els.historyList.innerHTML = ""; //cancello gli elementi di prima
   const recent = state.profile.history.slice(0, 5);
   if (recent.length === 0) {
     els.historyList.innerHTML = '<li><span class="history-temp">--</span><span class="history-detail">Raccontami la prima uscita</span></li>';
@@ -309,9 +306,9 @@ function renderProfile() {
   });
 }
 
-// ── EVENTI ────────────────────────────────────────────────────────────────────
+//eventi vari
 els.geoBtn.addEventListener("click", requestGeolocation);
-els.refreshBtn.addEventListener("click", () => fetchWeather());
+els.refreshBtn.addEventListener("click", fetchWeather);
 els.feedbackForm.addEventListener("change", aggiornaConsiglio);
 els.feedbackForm.addEventListener("submit", handleFeedback);
 els.loginBtn.addEventListener("click", () => handleAuth("login"));
@@ -324,7 +321,6 @@ els.resetBtn.addEventListener("click", () => {
   aggiornaConsiglio();
 });
 
-// ── AVVIO ─────────────────────────────────────────────────────────────────────
 renderProfile();
 renderAuthState();
 fetchWeather(state.coords);
