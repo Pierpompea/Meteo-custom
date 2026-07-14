@@ -1,4 +1,4 @@
-const http   = require("http");
+const http   = require("http"); //const https   = require("https");
 const fs     = require("fs");
 const crypto = require("crypto");
 
@@ -6,39 +6,59 @@ const PORT            = process.env.PORT || 10000;
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "*";
 const USERS_FILE      = "utenti.json";
 
-// ── DATABASE ──────────────────────────────────────────────────────────────────
-if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, JSON.stringify({ users: [] }, null, 2));
-const leggiUtenti  = ()       => JSON.parse(fs.readFileSync(USERS_FILE, "utf8"));
-const salvaUtenti  = (data)   => { fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2)); console.log("UTENTI_DB:", JSON.stringify(data)); };
-const trovaUtente  = (data, username) => data.users.find((u) => u.username === username);
+if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, JSON.stringify({ users: [] }, null, 2)); //non metto opzioni e metto 2 spazi
+const leggiUtenti = () => JSON.parse(fs.readFileSync(USERS_FILE, "utf8"));
+const salvaUtenti = (data) => { fs.writeFileSync(USERS_FILE, JSON.stringify(data, null, 2)); console.log("UTENTI_DB:", JSON.stringify(data)); };
+const trovaUtente = (data, username) => data.users.find((u) => u.username === username);
 
-// ── PASSWORD ──────────────────────────────────────────────────────────────────
 // salt è un valore casuale che permette di avere hash unici 
-const hashPassword    = (pw, salt = crypto.randomBytes(16).toString("hex")) =>
+const hashPassword = (pw, salt = crypto.randomBytes(16).toString("hex")) =>
   ({ salt, hash: crypto.pbkdf2Sync(pw, salt, 100000, 32, "sha256").toString("hex") });
 const verificaPassword = (pw, utente) =>
   crypto.timingSafeEqual(Buffer.from(hashPassword(pw, utente.salt).hash, "hex"), Buffer.from(utente.passwordHash, "hex"));
 
-// ── SESSIONI ──────────────────────────────────────────────────────────────────
-// sessionId → username si cancella se il server si riavvia (piano gratuito di render)
+// sessionId e username si cancella se il server si riavvia (piano gratuito di render)
 const sessioni        = new Map();
 const creaSessione    = (username) => { const id = crypto.randomBytes(32).toString("hex"); sessioni.set(id, username); return id; };
 const utenteFromReq   = (req)      => sessioni.get((req.headers.authorization || "").replace("Bearer ", ""));
 
-// ── HTTP ──────────────────────────────────────────────────────────────────────
-const leggiBody  = (req) => new Promise((ok, ko) => { let r = ""; req.on("data", (c) => r += c); req.on("end", () => { try { ok(r ? JSON.parse(r) : {}); } catch { ko(new Error("JSON non valido")); } }); });
+function leggiBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > 1_000_000) {
+        req.destroy();
+        reject(new Error("Body troppo grande"));
+      }
+    });
+    req.on("end", () => {
+      try {
+        resolve(body ? JSON.parse(body) : {});
+      } catch {
+        reject(new Error("JSON non valido"));
+      }
+    });
+  });
+}
+
 const rispondi   = (req, res, status, body) => {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Access-Control-Allow-Origin": FRONTEND_ORIGIN, "Access-Control-Allow-Headers": "Content-Type, Authorization", "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS" });
   res.end(JSON.stringify(body));
 };
 
-// ── ROUTES ────────────────────────────────────────────────────────────────────
-http.createServer(async (req, res) => {
+//const tlsOptions = {
+//  key:  fs.readFileSync("key.pem"),
+//  cert: fs.readFileSync("cert.pem"),
+//};
+
+http.createServer(async (req, res) => { //https.createServer( tlsOption ,async (req, res) => {
   if (req.method === "OPTIONS") { rispondi(req, res, 204, {}); return; }
 
   try {
-    if (req.method === "GET"  && req.url === "/health")        { rispondi(req, res, 200, { ok: true }); }
-
+    if (req.method === "GET"  && req.url === "/health") { 
+      rispondi(req, res, 200, { ok: true }); 
+    }
     else if (req.method === "POST" && req.url === "/api/register") {
       const { username, password, initialData } = await leggiBody(req);
       const user = String(username || "").trim().toLowerCase();
