@@ -355,7 +355,7 @@ h3 {
 
 .temperature-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.8fr);
+  grid-template-columns: minmax(0, 1fr) minmax(190px, 0.85fr);
   gap: 16px;
 }
 
